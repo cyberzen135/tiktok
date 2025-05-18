@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cosmic Frequencies Player</title>
+  <style>
+    body {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      height: 100vh; margin: 0;
+      background: #121212; color: #EEE;
+      font-family: sans-serif;
+    }
+    select, button {
+      margin: 0.5em; padding: 0.75em 1em;
+      font-size: 1rem; border-radius: 0.5em;
+      border: none;
+    }
+    button {
+      background: #2979ff; color: #FFF;
+      cursor: pointer;
+    }
+    button:active { transform: scale(0.97); }
+  </style>
+</head>
+<body>
+  <h2>Select Output & Play Cosmic Tones</h2>
+
+  <select id="deviceSelect"><option>Loading…</option></select>
+  <button id="playBtn">▶ Play</button>
+
+  <script>
+    const deviceSelect = document.getElementById('deviceSelect');
+    const playBtn      = document.getElementById('playBtn');
+    let audioCtx, gainNode, osc7, osc528, isPlaying = false, audioElem;
+
+    // 1. Unlock device labels by requesting audio permission :contentReference[oaicite:13]{index=13}
+    async function unlockLabels() {
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        console.warn('Permission denied; device labels may remain blank.');
+      }
+    }
+
+    // 2. Populate output devices list :contentReference[oaicite:14]{index=14}
+    async function populateDevices() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const outputs = devices.filter(d => d.kind === 'audiooutput');
+      deviceSelect.innerHTML = '';
+      outputs.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.text  = d.label || `Device ${deviceSelect.length + 1}`;
+        deviceSelect.append(opt);
+      });
+    }
+
+    // 3. Initialize AudioContext + GainNode :contentReference[oaicite:15]{index=15}
+    function initAudio() {
+      audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+      gainNode  = audioCtx.createGain();
+      gainNode.gain.value = 0.2;
+      gainNode.connect(audioCtx.destination);
+    }
+
+    // 4. Route audio output to selected device :contentReference[oaicite:16]{index=16}
+    async function setOutput(deviceId) {
+      if (!audioCtx) return;
+      try {
+        if (audioCtx.setSinkId) {
+          await audioCtx.setSinkId(deviceId);
+        } else {
+          // Fallback using <audio> element :contentReference[oaicite:17]{index=17}
+          if (!audioElem) {
+            audioElem = new Audio();
+            const dest = audioCtx.createMediaStreamDestination();
+            gainNode.disconnect();
+            gainNode.connect(dest);
+            audioElem.srcObject = dest.stream;
+            await audioElem.play();
+          }
+          await audioElem.setSinkId(deviceId);
+        }
+      } catch (err) {
+        console.error('Output device selection failed:', err);
+      }
+    }
+
+    // 5. Toggle cosmic tone playback :contentReference[oaicite:18]{index=18} :contentReference[oaicite:19]{index=19}
+    function togglePlay() {
+      if (!audioCtx) initAudio();
+      if (!isPlaying) {
+        osc7   = audioCtx.createOscillator();
+        osc528 = audioCtx.createOscillator();
+        osc7.frequency.value   = 7.83;
+        osc528.frequency.value = 528;
+        osc7.type   = 'sine';
+        osc528.type = 'sine';
+        osc7.connect(gainNode);
+        osc528.connect(gainNode);
+        osc7.start(); osc528.start();
+        playBtn.textContent = '■ Stop';
+      } else {
+        osc7.stop(); osc528.stop();
+        osc7.disconnect(); osc528.disconnect();
+        playBtn.textContent = '▶ Play';
+      }
+      isPlaying = !isPlaying;
+    }
+
+    // Boot sequence
+    (async () => {
+      await unlockLabels();
+      await populateDevices();
+      navigator.mediaDevices.addEventListener('devicechange', populateDevices);  // refresh on change :contentReference[oaicite:20]{index=20}
+      deviceSelect.onchange = () => setOutput(deviceSelect.value);
+      playBtn.onclick      = togglePlay;
+    })();
+  </script>
+</body>
+</html>
